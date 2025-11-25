@@ -1,0 +1,14 @@
+flask
+gunicorn
+
+pandas
+xlsxwriter
+numpy
+
+python-doctr
+pytesseract
+opencv-python
+ocrmypdf
+pillow
+pypdf2
+torch

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pipeline: Document Processor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0b1120; /* Dark Blue/Black */
+            overflow-x: hidden;
+            color: #e2e8f0;
+        }
+
+        /* --- Custom AI-Themed Animations and Styles --- */
+        
+        /* Floating Graphic Animation */
+        @keyframes float-graphic {
+            0% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+            25% { transform: translate(5vw, -5vh) scale(0.9); opacity: 0.5; }
+            50% { transform: translate(-5vw, 5vh) scale(1.1); opacity: 0.4; }
+            75% { transform: translate(5vw, 10vh) scale(1); opacity: 0.6; }
+            100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+        }
+
+        /* Watermark Animation */
+        @keyframes subtle-shift {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(20px, 10px); }
+        }
+
+        #background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            background: radial-gradient(circle at 50% 50%, rgba(30, 64, 175, 0.08) 0%, rgba(11, 17, 32, 1) 70%);
+            opacity: 0.8;
+            pointer-events: none;
+        }
+        
+        /* Watermark Layer */
+        #datamatically-watermark {
+            position: fixed;
+            top: 50%;
+            left:3%;
+            transform: translate(-50%, -50%) rotate(-10deg);
+            font-size: 11vw;
+            font-weight: 800;
+            color: rgba(67, 56, 202, 0.07);
+            z-index: -1;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(67, 56, 202, 0.05);
+            animation: subtle-shift 30s ease-in-out infinite alternate;
+        }
+
+        .particle {
+            position: absolute;
+            background-color: #3b82f6; /* Blue-500 */
+            border-radius: 50%;
+            box-shadow: 0 0 8px #3b82f6, 0 0 16px #3b82f650; 
+            animation-name: float-graphic;
+            animation-timing-function: ease-in-out;
+            animation-iteration-count: infinite;
+            animation-direction: alternate;
+            will-change: transform, opacity;
+        }
+
+        .card { 
+            background-color: #111827; /* Darker background */
+            box-shadow: 0 0 60px rgba(79, 70, 229, 0.3);
+            border: 1px solid #374151; 
+        }
+
+        .status-box { transition: all 0.3s ease-in-out; }
+        #progress-bar-fill { transition: width 0.5s ease-in-out; }
+
+        /* --- Button Hover Animation: Glowing Pulse --- */
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(129, 140, 248, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+        }
+        
+        .ai-btn-primary {
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 4px 15px rgba(49, 46, 129, 0.5);
+        }
+        
+        .ai-btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(129, 140, 248, 0.8);
+            animation: pulse-glow 1.5s infinite;
+        }
+
+        .ai-btn-secondary { transition: all 0.3s ease-in-out; }
+        .ai-btn-secondary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.5); }
+        .ai-btn-tertiary { transition: all 0.3s ease-in-out; }
+        .ai-btn-tertiary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(147, 51, 234, 0.5); }
+        .ai-btn-debug { transition: all 0.3s ease-in-out; }
+        .ai-btn-debug:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(234, 88, 12, 0.5); }
+
+        /* LLM Output Box Styling */
+        .llm-output-box h1, .llm-output-box h2, .llm-output-box h3 { 
+            font-size: 1.5rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.5rem; 
+            padding-bottom: 0.25rem; border-bottom: 1px solid #4b5563; color: #818cf8;
+        }
+        .llm-output-box p { margin-bottom: 1rem; color: #d1d5db; }
+        .llm-output-box ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 1rem; color: #d1d5db; }
+        .llm-output-box {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div id="background-animation"></div>
+    
+    <!-- Watermark Layer -->
+    <div id="datamatically-watermark">DATAMATICALLY</div>
+
+    <div id="app" class="min-h-screen flex items-center justify-center p-4 sm:p-8 relative z-10">
+        <div class="card w-full max-w-4xl p-6 sm:p-10 rounded-2xl">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-indigo-400 mb-2 border-b-2 border-indigo-500/50 pb-2">
+                Cognitive Core Pipeline
+            </h1>
+            <p class="text-gray-400 mb-8 text-sm sm:text-base">
+                Orchestrate DocTR (OCR) → Data Cleaning → XLSX Conversion.<br>
+                Input A → docTR_pp → B → welllwelll2 → C → jsontoxlsx → D (download).
+            </p>
+
+            <!-- Status, Output, and Analysis Area (Top Section) -->
+            <div id="main-content" class="mb-10">
+                <!-- Status and Output Area -->
+                <div id="status-container" class="mt-4 space-y-4">
+                    <div id="status-display" class="status-box text-sm p-4 rounded-xl border border-gray-600 bg-gray-800">
+                        <p class="font-medium text-gray-300">
+                            Status:
+                            <span id="current-status" class="text-indigo-300 font-semibold">
+                                Waiting for PDF upload...
+                            </span>
+                        </p>
+                    </div>
+
+                    <div id="download-area" class="hidden status-box p-6 rounded-2xl border-2 border-green-500 bg-green-900/40 space-y-4 shadow-xl">
+                        <p class="font-bold text-green-300 flex items-center">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                            Processing Complete! Use the buttons below for downloads.
+                        </p>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <a id="download-link" href="#" download="processed_output.xlsx"
+                               class="inline-flex items-center justify-center px-4 py-3 border border-transparent text-sm font-semibold rounded-xl shadow-lg text-white bg-green-600 hover:bg-green-700 ai-btn-secondary focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-700/50">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L10 11.586l1.293-1.293a1 1 0 111.414 1.414l-2 2a1 1 0 01-1.414 0l-2-2a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                    <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v8a1 1 0 11-2 0V3a1 1 0 011-1z" clip-rule="evenodd" />
+                                </svg>
+                                Download XLSX File (D)
+                            </a>
+                            <a id="download-pdf-link" href="#" download="searchable_output.pdf"
+                               class="inline-flex items-center justify-center px-4 py-3 border border-green-500 text-sm font-semibold rounded-xl shadow-md text-green-300 bg-transparent hover:bg-green-500/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50">
+                                Download Searchable PDF (B)
+                            </a>
+                        </div>
+                        
+                        <!-- LLM Feature Buttons (currently stubbed) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                            <button id="analyze-btn" onclick="analyzeExtractedData()"
+                                    class="inline-flex items-center justify-center px-4 py-3 border border-transparent text-sm font-semibold rounded-xl shadow-lg text-white bg-purple-600 hover:bg-purple-700 ai-btn-tertiary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                ✨ Run Data Quality Analysis (coming soon)
+                            </button>
+                            <button id="query-toggle-btn" onclick="toggleQueryInput()"
+                                    class="inline-flex items-center justify-center px-4 py-3 border border-transparent text-sm font-semibold rounded-xl shadow-lg text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500">
+                                ✨ Ask Advanced Data Query (coming soon)
+                            </button>
+                        </div>
+                        
+                    </div>
+                </div>
+
+                <!-- LLM Query Input Area (visual only for now) -->
+                <div id="query-input-area" class="hidden mt-6 p-5 card rounded-xl">
+                    <p class="text-pink-400 font-bold mb-2 text-lg">✨ Advanced Data Query</p>
+                    <textarea id="data-query" rows="2" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-400 focus:ring-pink-500 focus:border-pink-500 resize-none" placeholder="E.g., What is the total GST Amount across all items?"></textarea>
+                    <button id="run-query-btn" onclick="runDataQuery()"
+                            class="mt-3 w-full px-4 py-2 text-sm font-semibold text-white bg-pink-600 hover:bg-pink-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500">
+                        Run Query
+                    </button>
+                </div>
+                
+                <!-- LLM Output Areas -->
+                <div id="analysis-output" class="mt-4"></div>
+                <div id="query-output" class="mt-4"></div>
+
+                <!-- Error Message Area -->
+                <div id="error-message" class="hidden mt-6 p-5 bg-red-900/40 border-l-4 border-red-500 text-red-300 rounded-lg space-y-3 shadow-lg">
+                    <p class="font-bold flex items-center text-red-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                        Execution Error Detected:
+                    </p>
+                    <p id="error-text" class="text-sm mt-1"></p>
+                    <button id="debug-btn" onclick="runDebugAssistant()"
+                            class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-semibold rounded-xl shadow-lg text-white bg-orange-600 hover:bg-orange-700 ai-btn-debug focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500">
+                        ✨ Run Pipeline Debug Assistant (coming soon)
+                    </button>
+                    <div id="debug-output" class="mt-2 llm-output-box"></div>
+                </div>
+            </div>
+
+            <!-- Upload Bar at the Bottom -->
+            <div id="upload-bar" class="mt-8 pt-6 border-t border-gray-700/50">
+                <p class="text-indigo-400 mb-4 font-bold text-lg">Input Stage: Select PDF File (A)</p>
+                
+                <!-- File Input -->
+                <div class="mb-6">
+                    <label for="pdf-file" class="sr-only">Select PDF File</label>
+                    <input type="file" id="pdf-file" accept=".pdf" class="w-full text-sm text-gray-300 border border-indigo-600 rounded-xl cursor-pointer bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+                </div>
+
+                <!-- Process Button -->
+                <button id="process-btn" onclick="startProcessing()"
+                        class="w-full px-6 py-4 text-xl font-bold text-white bg-indigo-600 rounded-xl ai-btn-primary disabled:bg-indigo-800/60 disabled:shadow-none focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50"
+                        disabled>
+                    Start Pipeline Execution
+                </button>
+
+                <!-- Progress Bar -->
+                <div id="progress-bar-container" class="mt-4 hidden">
+                    <div class="flex justify-between mb-1 text-sm">
+                        <span class="font-medium text-indigo-400">Processing Status</span>
+                        <span id="progress-text" class="font-medium text-indigo-400">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-700 rounded-full h-3">
+                        <div id="progress-bar-fill" class="h-3 rounded-full bg-indigo-500 shadow-md" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Upload Bar -->
+
+        </div>
+    </div>
+
+    <script>
+        // === Element references ===
+        const fileInput = document.getElementById('pdf-file');
+        const processBtn = document.getElementById('process-btn');
+        const currentStatus = document.getElementById('current-status');
+        const downloadArea = document.getElementById('download-area');
+        const downloadLink = document.getElementById('download-link');
+        const downloadPdfLink = document.getElementById('download-pdf-link');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const analysisOutput = document.getElementById('analysis-output');
+        const queryInputArea = document.getElementById('query-input-area');
+        const queryOutput = document.getElementById('query-output');
+        const dataQueryInput = document.getElementById('data-query');
+        const debugOutput = document.getElementById('debug-output');
+
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const progressText = document.getElementById('progress-text');
+
+        function updateProgress(p) {
+            progressBarFill.style.width = p + '%';
+            progressText.textContent = p + '%';
+            if (p === 100) {
+                progressBarFill.classList.remove('bg-indigo-500');
+                progressBarFill.classList.add('bg-green-500');
+            } else {
+                progressBarFill.classList.add('bg-indigo-500');
+                progressBarFill.classList.remove('bg-green-500');
+            }
+        }
+
+        fileInput.addEventListener('change', () => {
+            const hasFile = fileInput.files && fileInput.files.length > 0;
+            processBtn.disabled = !hasFile;
+            currentStatus.textContent = hasFile
+                ? `Ready: ${fileInput.files[0].name}`
+                : 'Waiting for PDF upload...';
+            downloadArea.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            progressBarContainer.classList.add('hidden');
+            updateProgress(0);
+        });
+
+        async function startProcessing() {
+            if (!fileInput.files || !fileInput.files.length) return;
+
+            const file = fileInput.files[0];
+            processBtn.disabled = true;
+            downloadArea.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            analysisOutput.innerHTML = '';
+            queryOutput.innerHTML = '';
+            debugOutput.innerHTML = '';
+
+            progressBarContainer.classList.remove('hidden');
+            updateProgress(10);
+            currentStatus.textContent = 'Uploading PDF (A) to server...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const res = await fetch('/process', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                updateProgress(60);
+                currentStatus.textContent = 'Running A → docTR_pp → B → welllwelll2 → C → jsontoxlsx → D on server...';
+
+                if (!res.ok) {
+                    let msg = 'Server error';
+                    try {
+                        const err = await res.json();
+                        if (err && err.error) msg = err.error;
+                    } catch (_) {}
+                    throw new Error(msg);
+                }
+
+                const data = await res.json();
+
+                updateProgress(90);
+                currentStatus.textContent = 'Preparing downloads...';
+
+                if (!data.xlsx_base64) {
+                    throw new Error('No XLSX data returned from server.');
+                }
+
+                // XLSX (D)
+                const xlsxBlob = base64ToBlob(
+                    data.xlsx_base64,
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                );
+                downloadLink.href = URL.createObjectURL(xlsxBlob);
+
+                // Searchable PDF (B)
+                if (data.pdf_base64) {
+                    const pdfBlob = base64ToBlob(data.pdf_base64, 'application/pdf');
+                    downloadPdfLink.href = URL.createObjectURL(pdfBlob);
+                }
+
+                updateProgress(100);
+                currentStatus.textContent = 'Processing Complete! Download the final output files.';
+                downloadArea.classList.remove('hidden');
+            } catch (err) {
+                console.error('Pipeline Error:', err);
+                currentStatus.textContent = 'Processing failed.';
+                errorText.textContent = err.message || 'Unknown error during pipeline.';
+                errorMessage.classList.remove('hidden');
+                progressBarContainer.classList.add('hidden');
+                updateProgress(0);
+            } finally {
+                processBtn.disabled = !fileInput.files.length;
+            }
+        }
+
+        // Stubs for LLM features (visual only)
+        function analyzeExtractedData() {
+            analysisOutput.innerHTML = `
+                <div class="p-4 rounded-xl mt-4 llm-output-box">
+                    <p><strong>Data Quality Analysis (coming soon)</strong></p>
+                    <p>This feature will use "AI" to analyze the extracted JSON (C). For now, only the core A→D pipeline is implemented.</p>
+                </div>`;
+        }
+
+        function toggleQueryInput() {
+            queryInputArea.classList.toggle('hidden');
+            queryOutput.innerHTML = '';
+        }
+
+        function runDataQuery() {
+            const q = (dataQueryInput.value || '').trim();
+            if (!q) {
+                queryOutput.innerHTML = `
+                    <div class="p-4 rounded-xl mt-4 bg-yellow-900/40 border-l-4 border-yellow-500 text-yellow-200">
+                        Please enter a question first.
+                    </div>`;
+                return;
+            }
+            queryOutput.innerHTML = `
+                <div class="p-4 rounded-xl mt-4 llm-output-box">
+                    <p><strong>Advanced Query (coming soon)</strong></p>
+                    <p>Question: <em>${q}</em></p>
+                    <p>This will eventually be answered using "AI" on top of the processed data.</p>
+                </div>`;
+        }
+
+        function runDebugAssistant() {
+            debugOutput.innerHTML = `
+                <div class="p-4 rounded-xl mt-2 llm-output-box">
+                    <p><strong>Debug Assistant (coming soon)</strong></p>
+                    <p>For now, please copy any error text and share it so it can be inspected manually.</p>
+                </div>`;
+        }
+
+        function base64ToBlob(b64Data, contentType = '', sliceSize = 512) {
+            let cleaned = b64Data.replace(/[^A-Za-z0-9+/=]/g, '');
+            cleaned = cleaned.replace(/-/g, '+').replace(/_/g, '/');
+            while (cleaned.length % 4) {
+                cleaned += '=';
+            }
+
+            const byteCharacters = atob(cleaned);
+            const byteArrays = [];
+
+            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+                const slice = byteCharacters.slice(offset, offset + sliceSize);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+            }
+
+            return new Blob(byteArrays, { type: contentType });
+        }
+
+        // Background particles
+        function generateDots() {
+            const container = document.getElementById('background-animation');
+            const numParticles = 40; 
+            const maxDuration = 30;
+
+            for (let i = 0; i < numParticles; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                
+                particle.style.top = `${Math.random() * 100}vh`;
+                particle.style.left = `${Math.random() * 100}vw`;
+
+                const size = Math.floor(Math.random() * 3) + 2;
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                
+                particle.style.animationDuration = `${Math.random() * 10 + maxDuration - 10}s`; 
+                particle.style.animationDelay = `-${Math.random() * maxDuration}s`; 
+                particle.style.opacity = `${Math.random() * 0.3 + 0.1}`; 
+
+                container.appendChild(particle);
+            }
+        }
+
+        window.onload = () => {
+            generateDots();
+            processBtn.disabled = !fileInput.files.length;
+        };
+    </script>
+</body>
+</html>
