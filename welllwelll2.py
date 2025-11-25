@@ -15,6 +15,18 @@ def is_deliverymethod_mto(word: str) -> bool:
     """Return True if the word matches DeliveryMethod*MTO pattern."""
     return bool(deliverymethod_pattern.match(word))
 
+# ----------------------------------------------------------------------
+# EXTRA pattern: words starting with De* and containing Method or MTO
+# ----------------------------------------------------------------------
+de_method_mto_pattern = re.compile(
+    r"^De.*?(Method|MTO).*?$",
+    re.IGNORECASE
+)
+
+def is_de_method_or_mto(word: str) -> bool:
+    """Return True if word starts with De* and contains Method or MTO."""
+    return bool(de_method_mto_pattern.match(word))
+
 
 # ----------------------------------------------------------------------
 # 2) Text cleaner: remove redundant symbols like * - _ / ; :
@@ -500,6 +512,11 @@ def preprocess_pods_json(input_path: str, output_path: str) -> Dict[str, Any]:
                     # 3) remove DeliveryMethod*MTO patterns (on cleaned text)
                     if is_deliverymethod_mto(text):
                         continue
+                    
+                    # 3b) remove any De* word containing Method or MTO
+                    if is_de_method_or_mto(text):
+                        continue
+
 
                     # 4) drop specific blacklisted words
                     if is_blacklisted_word(text):
@@ -563,6 +580,7 @@ def preprocess_pods_json(input_path: str, output_path: str) -> Dict[str, Any]:
             }
         )
 
+
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(output, f, indent=2)
 
@@ -575,8 +593,8 @@ def preprocess_pods_json(input_path: str, output_path: str) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     # Adjust paths as needed
-    input_json = "jsons/PODS2_output.json"
-    output_json = "PODS2_output_processed.json"
+    input_json = "jsons/ocr.json"
+    output_json = "PODS_output_processed.json"
 
     processed = preprocess_pods_json(input_json, output_json)
     print(json.dumps(processed, indent=2)[:4000])  # print first part only

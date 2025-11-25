@@ -9,8 +9,8 @@ import pandas as pd
 # CONFIG
 # ----------------------------------------------------------------------
 
-INPUT_JSON = "PODS2_output_processed.json"   # change if needed
-OUTPUT_XLSX = "invoices2_output.xlsx"
+INPUT_JSON = "PODS_output_processed.json"   # change if needed
+OUTPUT_XLSX = "invoices_output.xlsx"
 
 # Canonical header (from your processed JSON)
 ITEM_HEADER = (
@@ -64,13 +64,78 @@ def extract_numeric_value(token: str) -> Optional[str]:
     return val if val else None
 
 
-def extract_invoice_no(lines: List[str]) -> Optional[str]:
-    """Find 'Invoice No 4047480' etc anywhere on the page."""
-    for text in lines:
+def extract_invoice_no(line_objs: List[Dict]) -> Optional[str]:
+    """
+    Use x-coordinates to find 'Invoice No' and grab the number to the right.
+
+    Strategy:
+    - For each line, sort its words by centroid x.
+    - Look for 'Invoice' followed by 'No' or 'No.'.
+    - Take the first word to the right that contains digits -> that's the invoice no.
+    - If that fails, fall back to the regex on full line text.
+    """
+
+    # 1) Geometry-based search
+    for ln in line_objs:
+        words = ln.get("words") or []
+        if not words:
+            continue
+
+        # sort words left-to-right by centroid x
+        words_sorted = sorted(
+            words,
+            key=lambda w: w.get("centroid_original", {}).get("x", 0.0)
+        )
+        n = len(words_sorted)
+
+        for i, w in enumerate(words_sorted):
+            text = (w.get("text") or "").strip()
+            t_norm = text.lower()
+
+            # Case A: 'Invoice' then separate 'No' / 'No.'
+            if t_norm == "invoice" and i + 1 < n:
+                next_text = (words_sorted[i + 1].get("text") or "").strip().lower()
+                if next_text in ("no", "no."):
+                    base_x = words_sorted[i + 1].get(
+                        "centroid_original", {}
+                    ).get("x", 0.0)
+
+                    # first numeric-ish word to the right
+                    for j in range(i + 2, n):
+                        wj = words_sorted[j]
+                        xj = wj.get("centroid_original", {}).get("x", 0.0)
+                        if xj <= base_x:
+                            continue
+
+                        cand = wj.get("text") or ""
+                        m = re.search(r"(\d+)", cand)
+                        if m:
+                            return m.group(1)
+
+            # Case B: 'InvoiceNo' / 'Invoice-No.' stuck together
+            compact = re.sub(r"[^\w]", "", text).lower()
+            if compact.startswith("invoiceno"):
+                base_x = w.get("centroid_original", {}).get("x", 0.0)
+                for j in range(i + 1, n):
+                    wj = words_sorted[j]
+                    xj = wj.get("centroid_original", {}).get("x", 0.0)
+                    if xj <= base_x:
+                        continue
+
+                    cand = wj.get("text") or ""
+                    m = re.search(r"(\d+)", cand)
+                    if m:
+                        return m.group(1)
+
+    # 2) Fallback: old regex on whole line text
+    for ln in line_objs:
+        text = ln.get("text", "") or ""
         m = INVOICE_RE.search(text)
         if m:
             return m.group(1)
+
     return None
+
 
 
 def extract_reference_no(lines: List[str]) -> Optional[str]:
@@ -332,7 +397,7 @@ def json_to_xlsx(input_json: str, output_xlsx: str) -> None:
             line_objs = page.get("lines", [])
             lines_text = [ln.get("text", "") for ln in line_objs]
 
-            invoice_no = extract_invoice_no(lines_text)
+            invoice_no = extract_invoice_no(line_objs)
             reference_no = extract_reference_no(lines_text)
             items, flagged = extract_items_from_page(lines_text)
 
