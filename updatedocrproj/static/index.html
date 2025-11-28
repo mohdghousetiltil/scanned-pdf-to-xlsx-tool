@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pipeline: Supply Chain Document Processor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            /* overflow removed to allow scrolling */
+        }
+
+        #threejs-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -10;
+        }
+
+        #datamatically-watermark {
+            position: fixed;
+            bottom: 10px;
+            right: 15px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: rgba(16, 185, 129, 0.4);
+            z-index: 20;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        .card {
+            background-color: rgba(30, 41, 59, 0.95);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6), 0 5px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #334155;
+        }
+
+        .status-box { transition: all 0.3s ease-in-out; }
+        #progress-bar-fill { transition: width 0.5s ease-in-out; }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.6); }
+            70% { box-shadow: 0 0 0 15px rgba(251, 191, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+        }
+
+        .ai-btn-primary {
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 4px 15px rgba(234, 179, 8, 0.3);
+        }
+
+        .ai-btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(251, 191, 36, 0.8);
+            animation: pulse-glow 1.5s infinite;
+        }
+
+        .ai-btn-secondary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.5);
+        }
+
+        .ai-btn-tertiary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.5);
+        }
+
+        .ai-btn-debug:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.5);
+        }
+
+        #status-display {
+            background-color: #1e3a8a !important;
+            border-color: #2563eb !important;
+        }
+
+        #current-status {
+            color: #bfdbfe !important;
+        }
+
+        .pipeline-step {
+            width: 40px;
+            height: 40px;
+            background-color: #475569;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: bold;
+            transition: all 0.3s ease-in-out;
+            border: 2px solid transparent;
+            position: relative;
+        }
+        .pipeline-step.active {
+            background-color: #f59e0b;
+            color: #1e293b;
+            box-shadow: 0 0 10px #fbbf24;
+            transform: scale(1.1);
+        }
+        .pipeline-step.completed {
+            background-color: #10b981;
+            color: #f0fdfa;
+            box-shadow: 0 0 10px #0d9488;
+        }
+        .pipeline-line {
+            height: 2px;
+            flex-grow: 1;
+            background-color: #475569;
+            transition: background-color 0.3s ease-in-out;
+            position: relative;
+        }
+        .pipeline-line.completed {
+            background-color: #10b981;
+        }
+
+        #error-message {
+            background-color: rgba(120, 53, 15, 0.5);
+            border-color: #fbbf24;
+        }
+    </style>
+</head>
+<body>
+    <!-- Three.js Canvas Container -->
+    <div id="threejs-container"></div>
+
+    <!-- Watermark Layer -->
+    <div id="datamatically-watermark">DATAMATICALLY</div>
+
+    <div id="app" class="min-h-screen flex items-center justify-center p-4 sm:p-8 relative z-10">
+        <div class="card w-full max-w-5xl p-6 sm:p-10 rounded-2xl">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-amber-400 mb-2 border-b-2 border-amber-400/50 pb-2">
+                Cognitive Pipeline: Document Flow Orchestrator
+            </h1>
+            <p class="text-slate-400 mb-8 text-sm sm:text-base">
+                Orchestrate DocTR (A→B) → Data Cleaning (B→C) → ZIP Compression (C→D) → XLSX Conversion (D). 
+                Upload a scanned invoice / POD PDF and retrieve three output files: Searchable PDF, ZIP, and XLSX.
+            </p>
+
+            <div id="pipeline-visualization" class="flex items-center justify-between my-8 w-full max-w-3xl mx-auto">
+                <div id="step-A" class="pipeline-step active" title="Input PDF File">A</div>
+                <div id="line-AB" class="pipeline-line"></div>
+                <div id="step-B" class="pipeline-step" title="docTR: OCR & Searchable PDF Generation">B</div>
+                <div id="line-BC" class="pipeline-line"></div>
+                <div id="step-C" class="pipeline-step" title="ZIP: Intermediate Data Compression (JSON/XML)">C</div>
+                <div id="line-CD" class="pipeline-line"></div>
+                <div id="step-D" class="pipeline-step" title="XLSX Conversion: Final Spreadsheet Generation">D</div>
+            </div>
+
+            <!-- Status, Output, and Analysis Area -->
+            <div id="main-content" class="mb-10">
+                <div id="status-container" class="mt-4 space-y-4">
+                    <div id="status-display" class="status-box text-sm p-4 rounded-xl border border-blue-600 bg-blue-900">
+                        <p class="font-medium text-blue-200">
+                            Status:
+                            <span id="current-status" class="text-amber-300 font-semibold">
+                                Awaiting inbound shipment (PDF upload)...
+                            </span>
+                        </p>
+                    </div>
+
+                    <div id="download-area" class="hidden status-box p-6 rounded-2xl border-2 border-teal-500 bg-teal-900/50 space-y-4 shadow-xl">
+                        <p class="font-bold text-teal-300 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-teal-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                            Data Dispatch Complete! Use the manifest buttons below.
+                        </p>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <a id="download-link-pdf" href="#" download="searchable_output.pdf"
+                               class="inline-flex items-center justify-center px-4 py-3 border border-teal-500 text-sm font-semibold rounded-xl shadow-md text-teal-400 bg-transparent hover:bg-teal-500/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50">
+                                Searchable PDF (B)
+                            </a>
+                            <a id="download-link-zip" href="#" download="intermediate_data.zip"
+                               class="inline-flex items-center justify-center px-4 py-3 border border-teal-500 text-sm font-semibold rounded-xl shadow-md text-teal-400 bg-transparent hover:bg-teal-500/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50">
+                                ZIP Container (C)
+                            </a>
+                            <a id="download-link-xlsx" href="#" download="processed_output.xlsx"
+                               class="inline-flex items-center justify-center px-4 py-3 border border-transparent text-sm font-semibold rounded-xl shadow-lg text-white bg-teal-600 hover:bg-teal-700 ai-btn-secondary focus:outline-none focus:ring-4 focus:ring-teal-500 focus:ring-opacity-50 disabled:bg-teal-700/50">
+                                XLSX Manifest (D)
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="error-message" class="hidden mt-6 p-5 border-l-4 text-amber-200 rounded-lg space-y-3 shadow-lg">
+                        <p class="font-bold flex items-center text-amber-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                            Execution Error Detected:
+                        </p>
+                        <p id="error-text" class="text-sm mt-1"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Bar at the Bottom -->
+            <div id="upload-bar" class="mt-8 pt-6 border-t border-slate-700/50">
+                <p class="text-amber-400 mb-4 font-bold text-lg">Inbound Data: Select Manifest File (A)</p>
+
+                <div class="mb-6">
+                    <label for="pdf-file" class="sr-only">Select PDF File</label>
+                    <input
+                        type="file"
+                        id="pdf-file"
+                        accept=".pdf"
+                        class="w-full text-sm text-slate-100 border border-amber-400 rounded-xl cursor-pointer bg-slate-900/50 p-3 focus:outline-none focus:ring-2 focus:ring-amber-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-amber-500 file:text-slate-900 hover:file:bg-amber-600"
+                    >
+                </div>
+
+                <button
+                    id="process-btn"
+                    onclick="startProcessing()"
+                    class="w-full px-6 py-4 text-xl font-bold text-slate-900 bg-amber-400 rounded-xl ai-btn-primary disabled:bg-amber-400/60 disabled:shadow-none focus:outline-none focus:ring-4 focus:ring-amber-500 focus:ring-opacity-50"
+                    disabled
+                >
+                    Start Data Flow Execution
+                </button>
+
+                <div id="progress-bar-container" class="mt-4 hidden">
+                    <div class="flex justify-between mb-1 text-sm">
+                        <span class="font-medium text-amber-400">Data Flow Status</span>
+                        <span id="progress-text" class="font-medium text-amber-400">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-700 rounded-full h-3">
+                        <div id="progress-bar-fill" class="h-3 rounded-full bg-amber-500 shadow-md" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Upload Bar -->
+        </div>
+    </div>
+
+    <script>
+        // --- Three.js background (data packets + grid + particle stream) ---
+        let scene, camera, renderer;
+        let mouseX = 0, mouseY = 0;
+        let windowHalfX = window.innerWidth / 2;
+        let windowHalfY = window.innerHeight / 2;
+        let dataPackets = [];
+        let particleSystem;
+        const NUM_PACKETS = 50;
+        const NUM_PARTICLES = 500;
+
+        function initThreeJS() {
+            const container = document.getElementById('threejs-container');
+
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x0f172a, 1, 1500);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 50, 500);
+            camera.rotation.x = -0.2;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0x404040, 5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(500, 500, 500);
+            scene.add(directionalLight);
+
+            // Ground grid
+            const gridHelper = new THREE.GridHelper(1000, 50, 0x10b981, 0x1e293b);
+            gridHelper.position.y = 0;
+            gridHelper.material.opacity = 0.5;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+
+            // Data packets (wireframe cubes) – exact animation params
+            const packetGeometry = new THREE.BoxGeometry(5, 5, 5);
+            const packetMaterial = new THREE.MeshBasicMaterial({
+                color: 0xfacc15,
+                wireframe: true
+            });
+
+            for (let i = 0; i < NUM_PACKETS; i++) {
+                const packet = new THREE.Mesh(packetGeometry, packetMaterial);
+                packet.position.x = Math.random() * 800 - 400;
+                packet.position.y = Math.random() * 50 + 5;
+                packet.position.z = Math.random() * 800 - 400;
+                // exact speed from the "perfect" background
+                packet.userData.speed = 0.5 + Math.random() * 1.5;
+                scene.add(packet);
+                dataPackets.push(packet);
+            }
+
+            // Particle stream – exact field from the "perfect" background
+            const particleGeometry = new THREE.BufferGeometry();
+            const vertices = [];
+            for (let i = 0; i < NUM_PARTICLES; i++) {
+                vertices.push(
+                    (Math.random() - 0.5) * 50,
+                    Math.random() * 10 + 5,
+                    (Math.random() - 0.5) * 50
+                );
+            }
+            particleGeometry.setAttribute(
+                'position',
+                new THREE.Float32BufferAttribute(vertices, 3)
+            );
+
+            const particleMaterial = new THREE.PointsMaterial({
+                color: 0x60a5fa,
+                size: 2,
+                sizeAttenuation: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particleSystem);
+
+            document.addEventListener('mousemove', onDocumentMouseMove);
+            window.addEventListener('resize', onWindowResize);
+
+            animate();
+        }
+
+        function onWindowResize() {
+            windowHalfX = window.innerWidth / 2;
+            windowHalfY = window.innerHeight / 2;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onDocumentMouseMove(event) {
+            mouseX = (event.clientX - windowHalfX) * 0.5;
+            mouseY = (event.clientY - windowHalfY) * 0.5;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Camera parallax based on mouse
+            camera.position.x += (mouseX / 10 - camera.position.x) * 0.05;
+            camera.position.y += (-mouseY / 10 + 50 - camera.position.y) * 0.05;
+
+            const targetRotationX = -0.2 - (mouseY / windowHalfY) * 0.1;
+            const targetRotationY = -(mouseX / windowHalfX) * 0.05;
+            camera.rotation.x += (targetRotationX - camera.rotation.x) * 0.05;
+            camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.05;
+
+            // Animate data packets (flying cubes)
+            dataPackets.forEach(packet => {
+                packet.position.z += packet.userData.speed;
+                if (packet.position.z > 500) {
+                    packet.position.z = -500;
+                    packet.position.x = Math.random() * 800 - 400;
+                }
+                packet.rotation.x += 0.01;
+                packet.rotation.y += 0.015;
+            });
+
+            // Animate particles moving toward camera
+            const positions = particleSystem.geometry.attributes.position.array;
+            for (let i = 0; i < NUM_PARTICLES; i++) {
+                const zIndex = i * 3 + 2;
+                positions[zIndex] += 2;
+                if (positions[zIndex] > 500) {
+                    positions[zIndex] = -500;
+                }
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Pipeline Visual Helpers ---
+        const pipelineSteps = {};
+        const pipelineLines = {};
+        let currentPipelineStep = 'A';
+
+        function initPipeline() {
+            pipelineSteps['A'] = document.getElementById('step-A');
+            pipelineSteps['B'] = document.getElementById('step-B');
+            pipelineSteps['C'] = document.getElementById('step-C');
+            pipelineSteps['D'] = document.getElementById('step-D');
+
+            pipelineLines['AB'] = document.getElementById('line-AB');
+            pipelineLines['BC'] = document.getElementById('line-BC');
+            pipelineLines['CD'] = document.getElementById('line-CD');
+        }
+
+        function updatePipelineVisualization(step) {
+            currentPipelineStep = step;
+            const steps = ['A', 'B', 'C', 'D'];
+
+            Object.values(pipelineSteps).forEach(el => el.classList.remove('active', 'completed'));
+            Object.values(pipelineLines).forEach(el => el.classList.remove('completed'));
+
+            const currentIndex = steps.indexOf(step);
+
+            for (let i = 0; i < steps.length; i++) {
+                const current = steps[i];
+                if (i < currentIndex) {
+                    pipelineSteps[current].classList.add('completed');
+                } else if (i === currentIndex) {
+                    pipelineSteps[current].classList.add('active');
+                }
+
+                if (i < currentIndex) {
+                    const next = steps[i + 1];
+                    if (next) {
+                        const line = pipelineLines[`${current}${next}`];
+                        if (line) line.classList.add('completed');
+                    }
+                }
+            }
+        }
+
+        // --- DOM references ---
+        const fileInput = document.getElementById('pdf-file');
+        const processBtn = document.getElementById('process-btn');
+        const currentStatus = document.getElementById('current-status');
+        const downloadArea = document.getElementById('download-area');
+
+        const downloadLinkXlsx = document.getElementById('download-link-xlsx');
+        const downloadLinkZip = document.getElementById('download-link-zip');
+        const downloadLinkPdf = document.getElementById('download-link-pdf');
+
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const progressText = document.getElementById('progress-text');
+
+        fileInput.addEventListener('change', () => {
+            const hasFile = !!fileInput.files.length;
+            processBtn.disabled = !hasFile;
+            downloadArea.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            progressBarContainer.classList.add('hidden');
+            updateProgress(0);
+            updatePipelineVisualization('A');
+
+            currentStatus.textContent = hasFile
+                ? `Ready to process: ${fileInput.files[0].name}`
+                : 'Awaiting inbound shipment (PDF upload)...';
+        });
+
+        function updateProgress(percentage) {
+            progressBarFill.style.width = `${percentage}%`;
+            progressText.textContent = `${percentage}%`;
+            if (percentage === 100) {
+                progressBarFill.classList.remove('bg-amber-500');
+                progressBarFill.classList.add('bg-teal-500');
+            } else {
+                progressBarFill.classList.add('bg-amber-500');
+                progressBarFill.classList.remove('bg-teal-500');
+            }
+        }
+
+        function base64ToBlob(b64Data, contentType = '', sliceSize = 512) {
+            let cleanedB64Data = b64Data.replace(/[^A-Za-z0-9+/=]/g, '');
+            cleanedB64Data = cleanedB64Data.replace(/-/g, '+').replace(/_/g, '/');
+            while (cleanedB64Data.length % 4) {
+                cleanedB64Data += '=';
+            }
+
+            const byteCharacters = atob(cleanedB64Data);
+            const byteArrays = [];
+
+            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+                const slice = byteCharacters.slice(offset, offset + sliceSize);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+            }
+
+            return new Blob(byteArrays, { type: contentType });
+        }
+
+        async function startProcessing() {
+            if (!fileInput.files.length) return;
+
+            const file = fileInput.files[0];
+            processBtn.disabled = true;
+            downloadArea.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            progressBarContainer.classList.remove('hidden');
+            updateProgress(10);
+            updatePipelineVisualization('A');
+            currentStatus.textContent = '[0/3] Uploading manifest (A)...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                updatePipelineVisualization('B');
+                currentStatus.textContent = '[1/3] Running docTR (A→B): OCR + PDF reconstruction...';
+
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                console.log('Server data:', data);
+
+                if (!response.ok) {
+                    const msg = data.error || `Server returned status ${response.status}`;
+                    throw new Error(msg);
+                }
+
+                updateProgress(60);
+                updatePipelineVisualization('C');
+                currentStatus.textContent = '[2/3] Generating intermediate ZIP (B→C)...';
+
+                // Expect plain URLs from the backend: pdf, xlsx, zip
+                if (!data.xlsx || !data.pdf || !data.zip) {
+                    throw new Error('Server response missing expected output URLs (xlsx/pdf/zip).');
+                }
+
+                updateProgress(85);
+                updatePipelineVisualization('D');
+                currentStatus.textContent = '[3/3] Generating XLSX manifest (C→D)...';
+
+                // Use the URLs directly
+                downloadLinkXlsx.href = data.xlsx;
+                downloadLinkPdf.href = data.pdf;
+                downloadLinkZip.href = data.zip;
+
+                updateProgress(100);
+                currentStatus.textContent = 'Data flow complete. Outputs ready to download.';
+                downloadArea.classList.remove('hidden');
+
+
+                updateProgress(100);
+                currentStatus.textContent = 'Data flow complete. Outputs ready to download.';
+                downloadArea.classList.remove('hidden');
+            } catch (err) {
+                console.error('Pipeline Error:', err);
+                currentStatus.textContent = 'Data flow terminated unexpectedly.';
+                errorText.textContent = err.message || 'Unknown error while processing document.';
+                errorMessage.classList.remove('hidden');
+                updateProgress(0);
+                updatePipelineVisualization('A');
+            } finally {
+                processBtn.disabled = false;
+            }
+        }
+
+        // --- Initialization ---
+        window.onload = function () {
+            initPipeline();
+            initThreeJS();
+            animate();
+        };
+    </script>
+</body>
+</html>
